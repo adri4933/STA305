@@ -1,23 +1,11 @@
 model{
   
   # Modèle d'échantillonnage/ Vraisemblance
-  
-  n_obs[1]~dbin(p_obs[1], N_obs[1])
-  n_obs[2]~dbin(p_obs[2], N_obs[2])
-  n_obs[3]~dbin(p_obs[3], N_obs[3])
-  n_obs[4]~dbin(p_obs[4], N_obs[4])
-  n_obs[5]~dbin(p_obs[5], N_obs[5])
-  n_obs[6]~dbin(p_obs[6], N_obs[6])
-  n_obs[7]~dbin(p_obs[7], N_obs[7])
-  
-  p_obs[1] = p_prev[1]*(1-p_fneg[1])+(1-p_prev[1])*p_fpos[1]
-  p_obs[2] = p_prev[2]*(1-p_fneg[2])+(1-p_prev[2])*p_fpos[2]
-  p_obs[3] = p_prev[3]*(1-p_fneg[2])+(1-p_prev[3])*p_fpos[2]
-  p_obs[4] = p_prev[4]*(1-p_fneg[2])+(1-p_prev[4])*p_fpos[2]
-  p_obs[5] = p_prev[5]*(1-p_fneg[3])+(1-p_prev[5])*p_fpos[3]
-  p_obs[6] = p_prev[6]*(1-p_fneg[4])+(1-p_prev[6])*p_fpos[4]
-  p_obs[7] = p_prev[7]*(1-p_fneg[3])+(1-p_prev[7])*p_fpos[3]
-  
+  for(i in 1:N1){
+    n_obs[i]~dbin(p_obs[i], N_obs[i])
+    j=ifelse(i==1,1,ifelse(i<=4,2,ifelse(i==6,4,3)))
+    p_obs[i] = p_prev[i]*(1-pfneg[j])+(1-p_prev[i])*p_fpos[j]
+  }  
   
   for (j in 1:N2){
     n_fpos[j]~dbin(p_fpos[j], N_neg[j])
@@ -37,11 +25,10 @@ model{
   }
   
   #hyper-priors
-  mu_prev ~ dnorm(0, 1/10)
-  mu_fpos ~ dnorm(0, 1/10)
-  mu_fneg ~ dnorm(0, 1/10)
+  mu_prev ~ dnorm(0, 10)
+  mu_fpos ~ dnorm(0, 10)
+  mu_fneg ~ dnorm(0, 10)
   sigma_prev ~ dexp(1)
   sigma_fpos ~ dexp(1)
   sigma_fneg ~ dexp(1)
 }
-
