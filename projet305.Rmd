@@ -1,0 +1,132 @@
+---
+title: "STA305"
+author: "Jessica Babin, Adrien Peltier, Marie Poupelin, Valentine Renaudeau"
+date: "2022-12-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=F, message=F)
+```
+
+## Importation des packages
+
+```{r}
+library(rjags)
+library(ggplot2)
+```
+
+## Création des données présentes dans l'article
+
+```{r}
+data <- data.frame(
+  region = c("Chelsea MA", "Gangelt, Germany", "Geneva, Switzerland (week 1)",
+             "Geneva, Switzerland (week 2)", "Los Angeles County", "San Miguel County",
+             "Santa Clara County"),
+  test.supplier = c("BioMedics", "EUROIMMUN", "EUROIMMUN", "EUROIMMUN", "Premier Biotech",
+                    "UBI Group", "Premier Biotech"),
+  sample.size = c(200,500,343,417,863,4757,2583),
+  number.positive = c(63,70,12,23,35,96,43),
+  number.negative = c(137,430,331,440,828,4661,2540)
+)
+
+#Données des tests d'anticorps avec résultats faux positifs
+data_test_FP <- data.frame(
+  test.supplier = c("BioMedics", "EUROIMMUN", "Premier Biotech", "UBI Group"),
+  sample.size = c(128,82,401,900),
+  number.positive = c(12,3,2,0),
+  number.negative = c(116,79,399,900)
+)
+
+#Données des tests d'anticorps avec résultats faux négatifs
+data_test_FN <- data.frame(
+  test.supplier = c("BioMedics", "EUROIMMUN", "Premier Biotech", "UBI Group"),
+  sample.size = c(397,30,197,30),
+  number.positive = c(352,20,178,30),
+  number.negative = c(45,10,19,0)
+)
+```
+
+## Définition du modèle
+
+```{r, results=F}
+jags.mod <- jags.model(file="model_meta.txt", data=list(N_obs=data$sample.size,
+                                                            n_obs=data$number.positive,
+                                                            N1=7,
+                                                            N2=4,
+                                                            n_fpos=data_test_FP$number.positive,
+                                                            n_fneg=data_test_FN$number.negative,
+                                                            N_pos=data_test_FN$number.positive,
+                                                            N_neg=data_test_FP$number.negative),
+                           n.chains=4)
+
+# Étude de sensibilité : hyper-priors différents
+jags.sensi <- jags.model(file="model_meta_sensi.txt", data=list(N_obs=data$sample.size,
+                                                            n_obs=data$number.positive,
+                                                            N1=7,
+                                                            N2=4,
+                                                            n_fpos=data_test_FP$number.positive,
+                                                            n_fneg=data_test_FN$number.negative,
+                                                            N_pos=data_test_FN$number.positive,
+                                                            N_neg=data_test_FP$number.negative),
+                           n.chains=4)
+```
+
+```{r}
+jags_res <- coda.samples(model = jags.mod, variable.names = c("p_prev"),
+                         n.iter = 10000)
+
+#on retire la phase de chauffe
+jags_window <- window(jags_res, start=5001)
+summary(jags_window)
+
+#étude de sensibilité, comparaison entre les deux modèles avec le DIC
+dic.jags1 <- dic.samples(jags.mod, 5000,type="pD")
+dic.jags2 <- dic.samples(jags.sensi, 5000, type="pD")
+diffdic(dic.jags1, dic.jags2)
+```
+
+## Visualisation des résultats
+
+```{r}
+#Visualisation de la convergence
+gelman.plot(jags_window)
+acfplot(jags_window, type="l")
+cumuplot(jags_window, ask=T, auto.layout=T)
+
+#Création du forest plot, pour visualiser la prévalence et intervalle de crédibilité pour chaque étude
+summ_jags <- summary(jags_window)
+hdiInt <- HDInterval::hdi(jags_window)
+
+df_forest <- data.frame(study=rev(c("Chelsea (MA)", "Gangelt (Germany)", "Geneva (Switzerland) week 1",
+                                "Geneva (Switzerland) week 2", "Los Angeles County (CA)",
+                                "San Miguel County (CO)", "Santa Clara County (CA)")),
+                        index=1:7,
+                        effect_mean=rev(summ_jags$statistics[,1]*100),
+                        lower= rev(hdiInt[1,]*100),
+                        upper=rev(hdiInt[2,]*100))
+
+ggplot(df_forest, aes(index, x=effect_mean, xmin=lower, xmax=upper)) +
+  geom_point() +
+  geom_errorbarh(height=.6) +
+  scale_y_continuous(breaks=1:nrow(df_forest), labels=df_forest$study) +
+  scale_x_continuous(labels=scales::percent_format(scale = 1)) +
+  scale_colour_manual(values = c("red")) +
+  xlab("Antibody prevalence") +
+  ylab("Study location") +
+  theme_minimal()
+
+  #Histogrammes des prévalences d'anticorps pour chaque étude
+df_plot <- data.frame(data_window1 = unlist(jags_window[,1]),
+                      data_window2 = unlist(jags_window[,2]),
+                      data_window3 = unlist(jags_window[,3]),
+                      data_window4 = unlist(jags_window[,4]),
+                      data_window5 = unlist(jags_window[,5]),
+                      data_window6 = unlist(jags_window[,6]),
+                      data_window7 = unlist(jags_window[,7]))
+
+#changer data_window1 avec le numéro de l'étude souhaitée, ici 1 = Chelsea (MA)
+ggplot(df_plot, aes(data_window1)) + geom_histogram(aes(y=..density..), colour="black") +
+  xlab("Prevalence of antibodies")
+```
+
