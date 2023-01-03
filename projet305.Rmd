@@ -73,6 +73,7 @@ jags.sensi <- jags.model(file="model_meta_sensi.txt", data=list(N_obs=data$sampl
 ```
 
 ```{r}
+#posterior distribution
 jags_res <- coda.samples(model = jags.mod, variable.names = c("p_prev"),
                          n.iter = 10000)
 
